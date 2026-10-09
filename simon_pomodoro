@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}[hidden]{display:none!important}</style>
+<title>Focus Tally</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,600..800&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: wide screens put the task list on the left and a sticky dark "Now" timer slab on the right; phones stack the timer above the list. The marker-yellow highlight is the one bold accent. */
+:root {
+  --font-display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Instrument Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --bg: #E7ECED;
+  --surface: #F8FAFA;
+  --ink: #14252B;
+  --muted: #566A71;
+  --line: #C6D2D5;
+  --btn: #14252B;
+  --on-btn: #F8FAFA;
+  --mark: #F6DC3B;
+  --on-mark: #14252B;
+  --mark-bg: #F8E975;
+  --slab: #14252B;
+  --slab-hi: #24383F;
+  --on-slab: #EEF3F4;
+  --slab-muted: #9DB1B8;
+  --slab-line: #3A4F57;
+  --danger: #B3261E;
+  --focus: #1D4ED8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D171B;
+    --surface: #15242A;
+    --ink: #E4EDEF;
+    --muted: #8FA3AA;
+    --line: #2A3D44;
+    --btn: #E4EDEF;
+    --on-btn: #0D171B;
+    --mark: #EBCF2F;
+    --on-mark: #14252B;
+    --mark-bg: #4D4416;
+    --slab: #091114;
+    --slab-hi: #172429;
+    --on-slab: #EEF3F4;
+    --slab-muted: #93A7AE;
+    --slab-line: #2E4249;
+    --danger: #F28B84;
+    --focus: #8EAEFF;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D171B;
+  --surface: #15242A;
+  --ink: #E4EDEF;
+  --muted: #8FA3AA;
+  --line: #2A3D44;
+  --btn: #E4EDEF;
+  --on-btn: #0D171B;
+  --mark: #EBCF2F;
+  --on-mark: #14252B;
+  --mark-bg: #4D4416;
+  --slab: #091114;
+  --slab-hi: #172429;
+  --on-slab: #EEF3F4;
+  --slab-muted: #93A7AE;
+  --slab-line: #2E4249;
+  --danger: #F28B84;
+  --focus: #8EAEFF;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 28px 48px;
+  padding-inline: clamp(16px, 4vw, 40px);
+}
+button, input, select { font: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.now :focus-visible { outline-color: var(--mark); }
+.sr {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.app { max-width: 1040px; margin-inline: auto; display: grid; gap: 24px; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; }
+h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: 1.9rem;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.date { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0; }
+.stats div { display: grid; gap: 2px; }
+.stats dt { font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.stats dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.3rem; font-weight: 500; }
+
+/* Layout */
+.layout { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+.board { display: grid; gap: 14px; min-width: 0; align-content: start; }
+@media (min-width: 880px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+  .board { grid-column: 1; grid-row: 1; }
+  .now { grid-column: 2; grid-row: 1; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); --ring: 240px; }
+}
+
+/* Buttons and fields */
+.btn {
+  font-weight: 600;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  padding: 0.5em 0.95em;
+  border-radius: 4px;
+  cursor: pointer;
+  min-height: 40px;
+}
+.btn:hover { background: var(--mark-bg); }
+.btn-primary { background: var(--btn); color: var(--on-btn); }
+.btn-primary:hover { background: var(--btn); opacity: 0.88; }
+.btn-sm { min-height: 32px; padding: 0.25em 0.7em; font-size: 0.85rem; }
+.btn[aria-pressed="true"] { background: var(--mark-bg); }
+.icon-btn {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 1px solid transparent; background: transparent; color: var(--muted);
+  border-radius: 4px; cursor: pointer; padding: 0;
+}
+.icon-btn:hover { color: var(--danger); border-color: var(--line); }
+.link-btn { background: none; border: 0; padding: 0; color: var(--ink); font-weight: 600; text-decoration: underline; cursor: pointer; }
+.field {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  padding: 0.5em 0.7em;
+  min-height: 40px;
+  min-width: 0;
+}
+.field::placeholder { color: var(--muted); }
+
+/* Add form */
+.add { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 14px; }
+.add-row { display: flex; gap: 10px; }
+.add-row .field { flex: 1; }
+.add-opts { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; }
+.opt { display: grid; gap: 5px; }
+.seg { position: relative; display: inline-flex; border: 1px solid var(--ink); border-radius: 4px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { padding: 0.5em 1em; font-weight: 600; font-size: 0.88rem; cursor: pointer; border-right: 1px solid var(--ink); }
+.seg label:last-of-type { border-right: 0; }
+.seg input:checked + label { background: var(--btn); color: var(--on-btn); }
+.seg input:focus-visible + label { outline: 2px solid var(--focus); outline-offset: -3px; }
+
+/* List */
+.list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+h2 { margin: 0; font-family: var(--font-display); font-stretch: 112%; font-weight: 700; font-size: 1.05rem; }
+.filters { display: inline-flex; gap: 4px; }
+.filters button { border: 0; background: transparent; color: var(--muted); font-weight: 600; padding: 0.3em 0.75em; border-radius: 4px; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--btn); color: var(--on-btn); }
+.list-notice { margin: 0; font-size: 0.9rem; color: var(--muted); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.empty { padding: 28px 16px; color: var(--muted); }
+.task { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.task:last-child { border-bottom: 0; }
+.check {
+  position: relative; width: 24px; height: 24px; margin-top: 1px; padding: 0;
+  border: 2px solid var(--ink); background: transparent; border-radius: 4px;
+  display: grid; place-items: center; cursor: pointer; color: var(--on-btn);
+}
+.check::after { content: ''; position: absolute; inset: -9px; }
+.check svg { width: 14px; height: 14px; opacity: 0; }
+.check[aria-checked="true"] { background: var(--btn); }
+.check[aria-checked="true"] svg { opacity: 1; }
+.title-text { font-weight: 600; font-size: 1rem; overflow-wrap: anywhere; }
+.is-active .title-text {
+  background: var(--mark-bg);
+  padding: 0 0.3em; margin-inline: -0.3em;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+.is-done .title-text { color: var(--muted); text-decoration: line-through; font-weight: 500; }
+.task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 7px; }
+.pill {
+  font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 2px 7px; border-radius: 3px; border: 1px solid var(--ink);
+}
+.pri-1 { background: var(--btn); color: var(--on-btn); }
+.pri-3 { border-style: dashed; border-color: var(--muted); color: var(--muted); }
+.tally { display: inline-flex; flex-wrap: wrap; gap: 4px; color: var(--ink); }
+.tally svg { display: block; width: 26px; height: 18px; }
+.tally line { stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.tally .ghost { opacity: 0.28; }
+.is-done .tally { color: var(--muted); }
+.count { font-size: 12px; color: var(--muted); }
+.task-actions { display: flex; gap: 6px; align-items: center; }
+.foot { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+/* Now panel */
+.now {
+  --ring: 220px;
+  background: var(--slab); color: var(--on-slab);
+  border: 1px solid var(--slab-line); border-radius: 8px;
+  padding: 18px; display: grid; gap: 18px; min-width: 0;
+}
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--slab-hi); padding: 4px; border-radius: 6px; }
+.modes button { border: 0; background: transparent; color: var(--slab-muted); font-weight: 600; font-size: 0.82rem; padding: 0.55em 0.2em; border-radius: 4px; cursor: pointer; }
+.modes button[aria-pressed="true"] { background: var(--slab-line); color: var(--on-slab); }
+.ring-wrap { position: relative; width: var(--ring); height: var(--ring); max-width: 100%; margin-inline: auto; display: grid; place-items: center; }
+.ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: var(--slab-line); stroke-width: 6; }
+.ring-fg { fill: none; stroke: var(--mark); stroke-width: 6; stroke-linecap: round; }
+@media (prefers-reduced-motion: no-preference) { .ring-fg { transition: stroke-dashoffset 0.3s linear; } }
+.ring-text { position: relative; text-align: center; }
+.time { font-size: calc(var(--ring) * 0.24); font-weight: 500; line-height: 1; letter-spacing: -0.02em; }
+.mode-label { margin-top: 8px; font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--slab-muted); }
+.controls { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.btn-mark { background: var(--mark); color: var(--on-mark); border-color: var(--mark); min-height: 46px; font-size: 1rem; }
+.btn-mark:hover { background: var(--mark); opacity: 0.9; }
+.btn-ghost { background: transparent; color: var(--on-slab); border-color: var(--slab-line); min-height: 46px; }
+.btn-ghost:hover { background: var(--slab-hi); }
+.notice { margin: 0; min-height: 2.9em; font-size: 0.88rem; color: var(--slab-muted); }
+.now-task { border-top: 1px solid var(--slab-line); padding-top: 14px; display: grid; gap: 4px; }
+.now .eyebrow { color: var(--slab-muted); }
+.now-title { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.now-sub { margin: 0; font-size: 0.85rem; color: var(--slab-muted); }
+.cycle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--slab-muted); }
+.dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--slab-muted); }
+.dot.on { background: var(--mark); border-color: var(--mark); }
+.settings { border-top: 1px solid var(--slab-line); padding-top: 12px; }
+.settings summary { cursor: pointer; font-size: 0.88rem; color: var(--slab-muted); }
+.settings-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.sfield { display: grid; gap: 5px; min-width: 0; }
+.now .field { background: var(--slab-hi); color: var(--on-slab); border-color: var(--slab-line); width: 100%; }
+.sound { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 0.88rem; }
+.sound input { width: 16px; height: 16px; accent-color: var(--mark); }
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Focus Tally</h1>
+      <p class="date" id="dateText"></p>
+    </div>
+    <dl class="stats" aria-label="Today">
+      <div><dt>Tasks done</dt><dd id="statDone">0/0</dd></div>
+      <div><dt>Sessions today</dt><dd id="statSessions">0</dd></div>
+      <div><dt>Focus time</dt><dd id="statMinutes">0 min</dd></div>
+    </dl>
+  </header>
+
+  <div class="layout">
+    <aside class="now" aria-label="Timer">
+      <div class="modes" role="group" aria-label="Timer mode">
+        <button type="button" data-mode="focus" aria-pressed="true">Focus</button>
+        <button type="button" data-mode="short" aria-pressed="false">Short break</button>
+        <button type="button" data-mode="long" aria-pressed="false">Long break</button>
+      </div>
+
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-bg" cx="60" cy="60" r="54"></circle>
+          <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="54"></circle>
+        </svg>
+        <div class="ring-text">
+          <div class="time mono" id="timeText" role="timer">25:00</div>
+          <div class="mode-label" id="modeLabel">Focus</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button type="button" class="btn btn-mark" id="startBtn">Start</button>
+        <button type="button" class="btn btn-ghost" id="resetBtn">Reset</button>
+        <button type="button" class="btn btn-ghost" id="skipBtn">Skip</button>
+      </div>
+      <p class="notice" id="notice" aria-live="polite"></p>
+
+      <div class="now-task">
+        <span class="eyebrow">Working on</span>
+        <p class="now-title" id="nowTitle">No task selected</p>
+        <p class="now-sub" id="nowSub"></p>
+      </div>
+
+      <div class="cycle" aria-live="off">
+        <span id="dots" style="display:inline-flex;gap:6px"></span>
+        <span id="cycleText"></span>
+      </div>
+
+      <details class="settings">
+        <summary>Timer settings</summary>
+        <div class="settings-grid">
+          <div class="sfield"><label class="eyebrow" for="setFocus">Focus</label><input class="field" id="setFocus" type="number" min="1" max="180" inputmode="numeric"></div>
+          <div class="sfield"><label class="eyebrow" for="setShort">Short</label><input class="field" id="setShort" type="number" min="1" max="180" inputmode="numeric"></div>
+          <div class="sfield"><label class="eyebrow" for="setLong">Long</label><input class="field" id="setLong" type="number" min="1" max="180" inputmode="numeric"></div>
+        </div>
+        <label class="sound" for="setSound"><input type="checkbox" id="setSound"> Play a sound when a timer ends</label>
+      </details>
+    </aside>
+
+    <section class="board" aria-label="Tasks">
+      <form class="add" id="addForm" autocomplete="off">
+        <div class="add-row">
+          <label class="sr" for="taskTitle">New task</label>
+          <input class="field" id="taskTitle" type="text" maxlength="120" placeholder="What needs doing today?" required>
+          <button class="btn btn-primary" type="submit" id="addBtn">Add task</button>
+        </div>
+        <div class="add-opts">
+          <div class="opt">
+            <span class="eyebrow" id="priLabel">Priority</span>
+            <div class="seg" role="radiogroup" aria-labelledby="priLabel">
+              <input type="radio" name="pri" id="pri-1" value="1">
+              <label for="pri-1">Must</label>
+              <input type="radio" name="pri" id="pri-2" value="2" checked>
+              <label for="pri-2">Should</label>
+              <input type="radio" name="pri" id="pri-3" value="3">
+              <label for="pri-3">Could</label>
+            </div>
+          </div>
+          <div class="opt">
+            <label class="eyebrow" for="taskEst">Estimate</label>
+            <select class="field" id="taskEst">
+              <option value="1">1 session · 25 min</option>
+              <option value="2" selected>2 sessions · 50 min</option>
+              <option value="3">3 sessions · 75 min</option>
+              <option value="4">4 sessions · 100 min</option>
+              <option value="5">5 sessions · 125 min</option>
+              <option value="6">6 sessions · 150 min</option>
+              <option value="8">8 sessions · 200 min</option>
+            </select>
+          </div>
+        </div>
+      </form>
+
+      <div class="list-head">
+        <h2>Task list</h2>
+        <div class="filters" role="group" aria-label="Filter tasks">
+          <button type="button" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" data-filter="open" aria-pressed="false">Open</button>
+          <button type="button" data-filter="done" aria-pressed="false">Done</button>
+        </div>
+      </div>
+
+      <p class="list-notice" id="listNotice" aria-live="polite" hidden>
+        <span id="listNoticeText"></span>
+        <button type="button" class="link-btn" id="undoBtn" hidden>Undo</button>
+      </p>
+
+      <ul class="list" id="taskList" aria-label="Tasks"></ul>
+
+      <p class="list-notice" id="listFoot">
+        <span id="sampleNote" hidden>These are sample tasks.</span>
+        <button type="button" class="link-btn" id="clearSamples" hidden>Clear samples</button>
+        <button type="button" class="link-btn" id="clearDone" hidden>Clear completed</button>
+      </p>
+    </section>
+  </div>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var KEY = 'focus-tally-v1';
+  var MODES = { focus: 'Focus', short: 'Short break', long: 'Long break' };
+  var PRI = { 1: 'Must', 2: 'Should', 3: 'Could' };
+  var DEF = { focus: 25, short: 5, long: 15 };
+  var C = 2 * Math.PI * 54;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function uid() { return Math.random().toString(36).slice(2, 9); }
+  function clamp(n, a, b) { return Math.min(b, Math.max(a, n)); }
+  function dayKey() { return new Date().toLocaleDateString('sv-SE'); }
+  function fmtMin(m) {
+    var h = Math.floor(m / 60), r = m % 60;
+    if (h) return r ? h + ' h ' + r + ' min' : h + ' h';
+    return r + ' min';
+  }
+
+  /* ---------- state and storage ---------- */
+  var storageOk = true;
+  var state;
+  var filter = 'all';
+  var lastDeleted = null;
+  var listNoticeTimer = null;
+
+  function readStore() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { storageOk = false; return null; }
+  }
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); storageOk = true; }
+    catch (e) { storageOk = false; }
+    renderFoot();
+  }
+  function dur(mode) { return state.settings[mode] * 60000; }
+
+  function seedSamples() {
+    var now = Date.now();
+    var rows = [
+      ['Outline the Q4 report', 1, 3, 2, false],
+      ['Review the open pull request', 1, 2, 0, false],
+      ['Plan next week’s priorities', 2, 2, 0, false],
+      ['Book a dentist appointment', 3, 1, 0, false],
+      ['Clear the unread email backlog', 2, 1, 1, true]
+    ];
+    state.tasks = rows.map(function (r, i) {
+      return { id: uid(), title: r[0], pri: r[1], est: r[2], done: r[3], completed: r[4], sample: true, created: now - (rows.length - i) * 1000 };
+    });
+    state.activeId = state.tasks[0].id;
+  }
+
+  (function init() {
+    var saved = readStore();
+    state = {
+      tasks: [], activeId: null,
+      settings: { focus: DEF.focus, short: DEF.short, long: DEF.long, sound: true },
+      timer: { mode: 'focus', running: false, endsAt: null, remaining: DEF.focus * 60000, cycle: 0 },
+      log: {}
+    };
+    if (saved && typeof saved === 'object') {
+      if (Array.isArray(saved.tasks)) state.tasks = saved.tasks;
+      state.activeId = saved.activeId || null;
+      Object.assign(state.settings, saved.settings || {});
+      Object.assign(state.timer, saved.timer || {});
+      if (saved.log && typeof saved.log === 'object') state.log = saved.log;
+    } else {
+      seedSamples();
+    }
+    ['focus', 'short', 'long'].forEach(function (k) {
+      state.settings[k] = clamp(parseInt(state.settings[k], 10) || DEF[k], 1, 180);
+    });
+    var t = state.timer;
+    if (!MODES[t.mode]) t.mode = 'focus';
+    t.cycle = Math.max(0, parseInt(t.cycle, 10) || 0);
+    if (!(t.running && Number(t.endsAt) > Date.now())) {
+      var wasRunning = t.running;
+      t.running = false; t.endsAt = null;
+      if (wasRunning || !(t.remaining > 0) || t.remaining > dur(t.mode)) t.remaining = dur(t.mode);
+    }
+  })();
+
+  /* ---------- timer ---------- */
+  var ac = null;
+  function ensureAudio() {
+    try {
+      if (!ac) { var AC = window.AudioContext || window.webkitAudioContext; if (AC) ac = new AC(); }
+      if (ac && ac.state === 'suspended') ac.resume();
+    } catch (e) { /* sound is optional */ }
+  }
+  function beep() {
+    if (!state.settings.sound || !ac) return;
+    try {
+      var now = ac.currentTime;
+      [[880, 0], [660, 0.24], [880, 0.48]].forEach(function (p) {
+        var o = ac.createOscillator(), g = ac.createGain(), d = p[1];
+        o.type = 'sine'; o.frequency.value = p[0];
+        g.gain.setValueAtTime(0.0001, now + d);
+        g.gain.exponentialRampToValueAtTime(0.18, now + d + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + d + 0.2);
+        o.connect(g); g.connect(ac.destination);
+        o.start(now + d); o.stop(now + d + 0.22);
+      });
+    } catch (e) { /* sound is optional */ }
+  }
+
+  function remainingMs() {
+    var t = state.timer;
+    return t.running ? Math.max(0, t.endsAt - Date.now()) : t.remaining;
+  }
+  function setNotice(text) { $('notice').textContent = text || ''; }
+  function activeTask() {
+    for (var i = 0; i < state.tasks.length; i++) {
+      if (state.tasks[i].id === state.activeId && !state.tasks[i].completed) return state.tasks[i];
+    }
+    return null;
+  }
+
+  function startTimer() {
+    var t = state.timer;
+    if (t.running) return;
+    ensureAudio();
+    if (!(t.remaining > 0)) t.remaining = dur(t.mode);
+    t.running = true; t.endsAt = Date.now() + t.remaining;
+    setNotice('');
+    persist(); renderTimer(); tickDisplay();
+  }
+  function pauseTimer() {
+    var t = state.timer;
+    t.remaining = remainingMs(); t.running = false; t.endsAt = null;
+    persist(); renderTimer(); tickDisplay();
+  }
+  function resetTimer() {
+    var t = state.timer;
+    t.running = false; t.endsAt = null; t.remaining = dur(t.mode);
+    setNotice(''); persist(); renderTimer(); tickDisplay();
+  }
+  function setMode(mode) {
+    var t = state.timer;
+    if (mode === t.mode) return;
+    t.mode = mode; resetTimer();
+  }
+  function skipTimer() {
+    var t = state.timer;
+    t.mode = t.mode === 'focus' ? 'short' : 'focus';
+    resetTimer();
+  }
+  function completeTimer() {
+    var t = state.timer, next, msg;
+    t.running = false; t.endsAt = null;
+    if (t.mode === 'focus') {
+      var k = dayKey();
+      var day = state.log[k] || (state.log[k] = { sessions: 0, minutes: 0 });
+      day.sessions += 1; day.minutes += state.settings.focus;
+      var task = activeTask();
+      if (task) task.done += 1;
+      t.cycle += 1;
+      next = t.cycle % 4 === 0 ? 'long' : 'short';
+      msg = 'Session logged' + (task ? ' to “' + task.title + '”' : '') + '. Time for a ' + (next === 'long' ? 'long' : 'short') + ' break.';
+    } else {
+      next = 'focus';
+      msg = 'Break over. Ready for the next focus session.';
+    }
+    t.mode = next; t.remaining = dur(next);
+    beep(); setNotice(msg);
+    persist(); renderAll();
+  }
+  function tickDisplay() {
+    var t = state.timer, rem = remainingMs();
+    if (t.running && rem <= 0) { completeTimer(); return; }
+    var secs = Math.ceil(rem / 1000);
+    var mm = Math.floor(secs / 60), ss = secs % 60;
+    $('timeText').textContent = (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss;
+    var total = dur(t.mode);
+    var frac = total > 0 ? clamp(rem / total, 0, 1) : 0;
+    $('ringFg').style.strokeDashoffset = String(C * (1 - frac));
+  }
+
+  /* ---------- rendering ---------- */
+  function tallyHtml(done, est) {
+    var total = Math.max(done, est);
+    if (total < 1) return '';
+    var out = '', groups = Math.ceil(total / 5);
+    for (var g = 0; g < groups; g++) {
+      var lines = '';
+      for (var p = 0; p < 5; p++) {
+        var idx = g * 5 + p;
+        if (idx >= total) break;
+        var cls = idx < done ? '' : ' class="ghost"';
+        if (p < 4) {
+          var x = 4 + p * 6;
+          lines += '<line' + cls + ' x1="' + x + '" y1="2" x2="' + x + '" y2="16"></line>';
+        } else {
+          lines += '<line' + cls + ' x1="1" y1="14" x2="25" y2="4"></line>';
+        }
+      }
+      out += '<svg viewBox="0 0 26 18" aria-hidden="true">' + lines + '</svg>';
+    }
+    return out;
+  }
+
+  function taskHtml(t) {
+    var active = state.activeId === t.id && !t.completed;
+    var title = esc(t.title);
+    return '<li class="task' + (t.completed ? ' is-done' : '') + (active ? ' is-active' : '') + '" data-id="' + t.id + '">' +
+      '<button type="button" class="check" data-action="toggle" role="checkbox" aria-checked="' + (t.completed ? 'true' : 'false') + '" aria-label="' + title + '">' +
+      '<svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>' +
+      '<div class="task-main"><div><span class="title-text">' + title + '</span></div>' +
+      '<div class="task-meta">' +
+      '<span class="pill pri-' + t.pri + '">' + PRI[t.pri] + '</span>' +
+      '<span class="tally">' + tallyHtml(t.done, t.est) + '</span>' +
+      '<span class="count mono"><span aria-hidden="true">' + t.done + '/' + t.est + '</span><span class="sr">' + t.done + ' of ' + t.est + ' sessions</span></span>' +
+      '</div></div>' +
+      '<div class="task-actions">' +
+      (t.completed ? '' : '<button type="button" class="btn btn-sm" data-action="focus" aria-pressed="' + (active ? 'true' : 'false') + '">' + (active ? 'Focusing' : 'Focus') + '</button>') +
+      '<button type="button" class="icon-btn" data-action="delete" aria-label="Delete ' + title + '">' +
+      '<svg viewBox="0 0 14 14" width="14" height="14" fill="none" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button>' +
+      '</div></li>';
+  }
+
+  function sortedTasks() {
+    return state.tasks.slice().sort(function (a, b) {
+      return (a.completed - b.completed) || (a.pri - b.pri) || (a.created - b.created);
+    });
+  }
+
+  function renderList() {
+    var items = sortedTasks();
+    if (filter === 'open') items = items.filter(function (t) { return !t.completed; });
+    if (filter === 'done') items = items.filter(function (t) { return t.completed; });
+    var list = $('taskList');
+    if (!items.length) {
+      var msg = filter === 'done' ? 'Nothing completed yet. Finished tasks collect here.'
+        : filter === 'open' && state.tasks.length ? 'Everything is done. Add another task or take a break.'
+        : 'No tasks yet. Add the first thing you want to finish today.';
+      list.innerHTML = '<li class="empty">' + msg + '</li>';
+    } else {
+      list.innerHTML = items.map(taskHtml).join('');
+    }
+    var hasSamples = state.tasks.some(function (t) { return t.sample; });
+    var hasDone = state.tasks.some(function (t) { return t.completed; });
+    $('sampleNote').hidden = !hasSamples;
+    $('clearSamples').hidden = !hasSamples;
+    $('clearDone').hidden = !hasDone;
+    $('listFoot').hidden = !hasSamples && !hasDone;
+  }
+
+  function renderFilters() {
+    document.querySelectorAll('[data-filter]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.filter === filter));
+    });
+  }
+
+  function renderStats() {
+    var done = state.tasks.filter(function (t) { return t.completed; }).length;
+    var day = state.log[dayKey()] || { sessions: 0, minutes: 0 };
+    $('statDone').textContent = done + '/' + state.tasks.length;
+    $('statSessions').textContent = String(day.sessions);
+    $('statMinutes').textContent = fmtMin(day.minutes);
+  }
+
+  function renderTimer() {
+    var t = state.timer;
+    document.querySelectorAll('[data-mode]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.mode === t.mode));
+    });
+    $('modeLabel').textContent = MODES[t.mode];
+    var task = activeTask();
+    $('nowTitle').textContent = task ? task.title : 'No task selected';
+    $('nowSub').textContent = task
+      ? task.done + ' of ' + task.est + ' sessions done'
+      : 'Press Focus on a task, or just start the timer.';
+    $('startBtn').textContent = t.running ? 'Pause' : (remainingMs() < dur(t.mode) ? 'Resume' : 'Start');
+    var filled = t.mode === 'long' ? 4 : t.cycle % 4;
+    var dots = '';
+    for (var i = 0; i < 4; i++) dots += '<span class="dot' + (i < filled ? ' on' : '') + '"></span>';
+    $('dots').innerHTML = dots;
+    $('cycleText').textContent = t.mode === 'long'
+      ? 'Round complete'
+      : (t.mode === 'focus' ? 'Session ' + (t.cycle % 4 + 1) + ' of 4' : filled + ' of 4 before a long break');
+  }
+
+  function renderFoot() {
+    $('foot').textContent = storageOk
+      ? 'Tasks, timer and history are saved in this browser only. A session counts when a focus timer reaches zero.'
+      : 'This browser is blocking storage, so changes last only until you close the page.';
+  }
+
+  function renderAll() { renderStats(); renderList(); renderTimer(); tickDisplay(); }
+
+  function showListNotice(text, withUndo) {
+    $('listNoticeText').textContent = text;
+    $('undoBtn').hidden = !withUndo;
+    $('listNotice').hidden = false;
+    clearTimeout(listNoticeTimer);
+    listNoticeTimer = setTimeout(function () { $('listNotice').hidden = true; lastDeleted = null; }, 8000);
+  }
+
+  /* ---------- events ---------- */
+  $('addForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var input = $('taskTitle');
+    var title = input.value.trim();
+    if (!title) return;
+    var pri = parseInt(document.querySelector('input[name="pri"]:checked').value, 10);
+    var est = parseInt($('taskEst').value, 10);
+    state.tasks.push({ id: uid(), title: title, pri: pri, est: est, done: 0, completed: false, sample: false, created: Date.now() });
+    input.value = '';
+    persist(); renderAll();
+    input.focus();
+  });
+
+  $('taskList').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    var li = btn.closest('li[data-id]');
+    if (!li) return;
+    var id = li.dataset.id;
+    var idx = state.tasks.findIndex(function (t) { return t.id === id; });
+    if (idx < 0) return;
+    var task = state.tasks[idx];
+    var action = btn.dataset.action;
+    if (action === 'toggle') {
+      task.completed = !task.completed;
+      if (task.completed && state.activeId === id) state.activeId = null;
+    } else if (action === 'focus') {
+      state.activeId = state.activeId === id ? null : id;
+    } else if (action === 'delete') {
+      var wasActive = state.activeId === id;
+      state.tasks.splice(idx, 1);
+      if (wasActive) state.activeId = null;
+      lastDeleted = { task: task, index: idx, wasActive: wasActive };
+      showListNotice('Deleted “' + task.title + '”.', true);
+    }
+    persist(); renderAll();
+  });
+
+  $('undoBtn').addEventListener('click', function () {
+    if (!lastDeleted) return;
+    state.tasks.splice(Math.min(lastDeleted.index, state.tasks.length), 0, lastDeleted.task);
+    if (lastDeleted.wasActive) state.activeId = lastDeleted.task.id;
+    lastDeleted = null;
+    $('listNotice').hidden = true;
+    persist(); renderAll();
+  });
+
+  $('clearSamples').addEventListener('click', function () {
+    state.tasks = state.tasks.filter(function (t) { return !t.sample; });
+    if (!state.tasks.some(function (t) { return t.id === state.activeId; })) state.activeId = null;
+    persist(); renderAll();
+  });
+  $('clearDone').addEventListener('click', function () {
+    var n = state.tasks.filter(function (t) { return t.completed; }).length;
+    state.tasks = state.tasks.filter(function (t) { return !t.completed; });
+    lastDeleted = null;
+    showListNotice('Cleared ' + n + ' completed ' + (n === 1 ? 'task' : 'tasks') + '.', false);
+    persist(); renderAll();
+  });
+
+  document.querySelectorAll('[data-filter]').forEach(function (b) {
+    b.addEventListener('click', function () { filter = b.dataset.filter; renderFilters(); renderList(); });
+  });
+  document.querySelectorAll('[data-mode]').forEach(function (b) {
+    b.addEventListener('click', function () { setMode(b.dataset.mode); });
+  });
+  $('startBtn').addEventListener('click', function () { state.timer.running ? pauseTimer() : startTimer(); });
+  $('resetBtn').addEventListener('click', resetTimer);
+  $('skipBtn').addEventListener('click', skipTimer);
+
+  [['setFocus', 'focus'], ['setShort', 'short'], ['setLong', 'long']].forEach(function (pair) {
+    var el = $(pair[0]), key = pair[1];
+    el.value = state.settings[key];
+    el.addEventListener('change', function () {
+      var v = clamp(parseInt(el.value, 10) || DEF[key], 1, 180);
+      el.value = v; state.settings[key] = v;
+      var t = state.timer;
+      if (!t.running && t.mode === key) t.remaining = dur(key);
+      persist(); renderTimer(); tickDisplay();
+    });
+  });
+  $('setSound').checked = !!state.settings.sound;
+  $('setSound').addEventListener('change', function () {
+    state.settings.sound = $('setSound').checked;
+    if (state.settings.sound) ensureAudio();
+    persist();
+  });
+
+  document.addEventListener('visibilitychange', tickDisplay);
+  setInterval(tickDisplay, 250);
+
+  /* ---------- first paint ---------- */
+  $('ringFg').style.strokeDasharray = String(C);
+  $('dateText').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  renderFilters(); renderFoot(); renderAll();
+})();
+</script>
+</body>
+</html>
